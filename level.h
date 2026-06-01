@@ -138,6 +138,15 @@ static inline void level_state_hide_entities(LevelState* state, GameContext* ctx
         entity_hide_current_view(state->entities[i], ctx);
 }
 
+static inline void level_state_hide_renderables(LevelState* state, GameContext* ctx)
+{
+    if (state == NULL || ctx == NULL)
+        return;
+
+    player_hide_view(state->player, ctx);
+    level_state_hide_entities(state, ctx);
+}
+
 static inline void game_clear_all_screens(GameContext* ctx)
 {
     if (ctx == NULL)

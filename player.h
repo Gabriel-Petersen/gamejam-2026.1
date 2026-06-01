@@ -189,6 +189,19 @@ static void player_draw_view(Player* player, GameContext* ctx)
     if (player == NULL || ctx == NULL)
         return;
 
+    if (ctx->curViewMode != TERMINAL)
+    {
+#ifndef DEBUG_ENABLE
+        DEBUG_LOG("[PL] draw enter player=%p sprite=%p mode=%d frame=%d qframes=%d renderizado=%d\n",
+            (void*)player,
+            (void*)player->sprite,
+            (int)ctx->curViewMode,
+            player->sprite != NULL ? player->sprite->frame_atual : -1,
+            player->sprite != NULL ? player->sprite->qtd_frames : -1,
+            player->sprite != NULL ? player->sprite->renderizado : -1);
+#endif
+    }
+
     if (ctx->curViewMode == TERMINAL)
     {
         print_rgb_txt(
@@ -204,11 +217,42 @@ static void player_draw_view(Player* player, GameContext* ctx)
         return;
     }
 
-    player->sprite->position = player->position;
-    if (player->sprite->renderizado)
-        esconder_objeto_complexo(ctx->curScreen(ctx), player->sprite);
+    if (player->sprite == NULL || player->sprite->qtd_frames <= 0)
+    {
+    #ifndef DEBUG_ENABLE
+        DEBUG_LOG("[PL] draw abort: invalid sprite or frame count\n");
+    #endif
+        return;
+    }
 
+    if (player->sprite->frame_atual < 0 || player->sprite->frame_atual >= player->sprite->qtd_frames)
+    {
+#ifndef DEBUG_ENABLE
+        DEBUG_LOG("[PL] draw clamp frame from %d to 0\n", player->sprite->frame_atual);
+#endif
+        player->sprite->frame_atual = 0;
+    }
+
+    player->sprite->position = player->position;
+#ifndef DEBUG_ENABLE
+    if (ctx->curViewMode != TERMINAL)
+        DEBUG_LOG("[PL] draw before-hide-check renderizado=%d\n", player->sprite->renderizado);
+#endif
+    if (player->sprite->renderizado)
+    {
+#ifndef DEBUG_ENABLE
+        DEBUG_LOG("[PL] draw hide old sprite\n");
+#endif
+        esconder_objeto_complexo(ctx->curScreen(ctx), player->sprite);
+    }
+
+#ifndef DEBUG_ENABLE
+    DEBUG_LOG("[PL] draw before-draw\n");
+#endif
     desenhar_objeto_complexo(ctx->curScreen(ctx), player->sprite);
+#ifndef DEBUG_ENABLE
+    DEBUG_LOG("[PL] draw after-draw\n");
+#endif
 }
 
 static void player_hide_view(Player* player, GameContext* ctx)

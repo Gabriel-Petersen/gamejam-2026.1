@@ -648,16 +648,20 @@ static void level1_draw(LevelInstance* level, LevelContext* ctx)
 
 static void level1_destroy(LevelInstance* level, LevelContext* ctx)
 {
-    (void)ctx;
     if (level == NULL)
         return;
 
     Level1State* local = (Level1State*)level->state;
     if (local != NULL && local->level_label != NULL)
     {
+        if (ctx != NULL && ctx->game != NULL)
+            esconder_objeto(ctx->game->curScreen(ctx->game), local->level_label);
         excluir_objeto(local->level_label);
         local->level_label = NULL;
     }
+
+    if (ctx != NULL && ctx->game != NULL)
+        level_state_hide_renderables(&level->common, ctx->game);
 
     level_state_destroy(&level->common);
 

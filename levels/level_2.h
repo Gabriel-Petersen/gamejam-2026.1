@@ -19,8 +19,6 @@ typedef struct Level2State {
 
 enum {
     LEVEL2_PLATFORM_Y = 24,
-    LEVEL2_PLATFORM_VISUAL_OFFSET_Y = 1,
-    LEVEL2_GOAL_VISUAL_OFFSET_Y = -4,
     LEVEL2_LEFT_PLATFORM_START = 8,
     LEVEL2_LEFT_PLATFORM_END = 37,
     LEVEL2_BRIDGE_BASE_START = 41,
@@ -30,6 +28,7 @@ enum {
     LEVEL2_RIGHT_PLATFORM_END = 113,
     LEVEL2_GOAL_X = 111,
     LEVEL2_GOAL_Y = 23
+    ,LEVEL2_RESET_ROW = 31
 };
 
 static CodeFile* create_level2_codefile(void)
@@ -76,7 +75,6 @@ static ObjetoComplexo* level2_create_platform_visual(Color color, Vector2 size)
     frames[0] = criar_retangulo_monocromatico(color, size);
     frames[0]->position = VETOR_NULO;
     ObjetoComplexo* representation = criar_objeto_complexo_via_lista(frames, 1);
-    centralizar_objeto_complexo(representation);
     return representation;
 }
 
@@ -106,19 +104,63 @@ static void level2_setup_collision_map(LevelState* common)
     level2_fill_floor_segment(&common->collision_map, LEVEL2_RIGHT_PLATFORM_START, LEVEL2_RIGHT_PLATFORM_END, LEVEL2_PLATFORM_Y, COLLISION_CELL_SOLID);
 
     collision_matrix_set(&common->collision_map, LEVEL2_GOAL_X, LEVEL2_GOAL_Y, 3);
+
+    /* reset row: falling into this row resets player to spawn */
+    for (int x = 0; x < common->collision_map.width; x++)
+        collision_matrix_set(&common->collision_map, x, LEVEL2_RESET_ROW, COLLISION_CELL_TRIGGER);
 }
 
-static void level2_sync_bridge_visibility(LevelState* common, Level2State* local, ViewMode view_mode)
+static bool level2_is_reset_trigger(Vector2 cell_world_pos)
+{
+    return cell_world_pos.y == LEVEL2_RESET_ROW;
+}
+
+static void level2_reset_player(Player* player)
+{
+    if (player == NULL) return;
+    LevelState* common = (LevelState*)player->user_data;
+    if (common == NULL) return;
+    level_state_reset_player(common);
+    player_apply_state(player, PLAYER_STATE_IDLE);
+}
+
+static void level2_player_trigger_proxy(void* actor, uint8_t cell_type, Vector2 cell_pos, GameContext* ctx)
+{
+    Player* player = (Player*)actor;
+    if (player == NULL || player->on_triggering == NULL)
+        return;
+
+    player->on_triggering(player, cell_type, cell_pos, ctx);
+}
+
+static void level2_player_on_triggering(Player* player, uint8_t cell_type, Vector2 cell_pos, GameContext* ctx)
+{
+    if (player == NULL || cell_type != COLLISION_CELL_TRIGGER)
+        return;
+
+    if (level2_is_reset_trigger(cell_pos))
+        level2_reset_player(player);
+    else
+        player_apply_state(player, PLAYER_STATE_HIT);
+
+    (void)ctx;
+}
+
+static void level2_sync_bridge_visibility(LevelState* common, Level2State* local, GameContext* game)
 {
     if (common == NULL || local == NULL)
         return;
+    if (game == NULL) return;
 
-    bool show_bridge = local->bridges_enabled && view_mode == DEBUG_COLLISION;
+    bool show_bridge = local->bridges_enabled && game->curViewMode == DEBUG_COLLISION;
     for (int i = 0; i < 3; i++)
     {
         Entity* bridge = level_state_entity_at(common, local->bridge_indices[i]);
         if (bridge == NULL)
             continue;
+
+        if (!show_bridge && bridge->representation != NULL && bridge->representation->renderizado)
+            entity_hide_representation(bridge, game);
 
         entity_set_visible(bridge, show_bridge);
         bridge->collidable = local->bridges_enabled;
@@ -168,7 +210,7 @@ static void level2_bridge_on_token(Entity* bridge, CodeToken* token, GameContext
 
     bool open = (strcmp(token->string, "true") == 0 || strcmp(token->string, "1") == 0);
     level2_set_bridge_state(local->common, local, open);
-    level2_sync_bridge_visibility(local->common, local, ctx->curViewMode);
+    level2_sync_bridge_visibility(local->common, local, ctx);
 }
 
 static bool level2_init(LevelInstance* level, LevelContext* ctx)
@@ -176,10 +218,23 @@ static bool level2_init(LevelInstance* level, LevelContext* ctx)
     if (level == NULL || ctx == NULL || ctx->game == NULL)
         return false;
 
+#ifndef DEBUG_ENABLE
+    DEBUG_LOG("[L2] init begin\n");
+#endif
+
     LevelState* common = &level->common;
     Level2State* local = (Level2State*)malloc(sizeof(Level2State));
     if (local == NULL)
+    {
+#ifndef DEBUG_ENABLE
+        DEBUG_LOG("[L2] init fail: local allocation failed\n");
+#endif
         return false;
+    }
+
+#ifndef DEBUG_ENABLE
+    DEBUG_LOG("[L2] init local=%p common=%p\n", (void*)local, (void*)common);
+#endif
 
     level->state = local;
     local->common = common;
@@ -193,39 +248,51 @@ static bool level2_init(LevelInstance* level, LevelContext* ctx)
     local->bridges_enabled = false;
 
     level_state_init(common, ctx->game->curViewMode);
+#ifndef DEBUG_ENABLE
+    DEBUG_LOG("[L2] init after level_state_init\n");
+#endif
+    game_clear_all_screens(ctx->game);
 
     level2_setup_collision_map(common);
+#ifndef DEBUG_ENABLE
+    DEBUG_LOG("[L2] init collision map ready width=%d height=%d cells=%p\n", common->collision_map.width, common->collision_map.height, (void*)common->collision_map.cells);
+#endif
 
     codebinding_registry_init(&common->binding_registry);
     codeeditor_init(&common->editor_session, create_level2_codefile());
     codeeditor_set_bindings(&common->editor_session, &common->binding_registry);
+#ifndef DEBUG_ENABLE
+    DEBUG_LOG("[L2] init editor ready editor=%p committed=%p bindings=%p\n",
+        (void*)common->editor_session.editor_codefile,
+        (void*)common->editor_session.committed_codefile,
+        (void*)&common->binding_registry);
+#endif
 
     Entity* left_platform = create_entity(
-        collision_matrix_cell_world(&common->collision_map, LEVEL2_LEFT_PLATFORM_START, LEVEL2_PLATFORM_Y),
+        collision_matrix_cell_world(&common->collision_map, LEVEL2_LEFT_PLATFORM_START, LEVEL2_PLATFORM_Y + 1),
         &((Vector2){LEVEL2_LEFT_PLATFORM_END - LEVEL2_LEFT_PLATFORM_START + 1, 2}),
         NULL
     );
     Entity* right_platform = create_entity(
-        collision_matrix_cell_world(&common->collision_map, LEVEL2_RIGHT_PLATFORM_START, LEVEL2_PLATFORM_Y),
+        collision_matrix_cell_world(&common->collision_map, LEVEL2_RIGHT_PLATFORM_START, LEVEL2_PLATFORM_Y + 1),
         &((Vector2){LEVEL2_RIGHT_PLATFORM_END - LEVEL2_RIGHT_PLATFORM_START + 1, 2}),
         NULL
     );
     Entity* goal_portal = create_entity(
-        collision_matrix_cell_world(&common->collision_map, LEVEL2_GOAL_X, LEVEL2_GOAL_Y),
+        vector_sum(
+            v_prod(VETOR_CIMA, 8), 
+            collision_matrix_cell_world(&common->collision_map, LEVEL2_GOAL_X, LEVEL2_GOAL_Y)
+        ),
         &((Vector2){5, 8}),
         NULL
     );
     Entity* bridges[3] = {NULL, NULL, NULL};
 
-    if (left_platform != NULL)
-        left_platform->position.y += LEVEL2_PLATFORM_VISUAL_OFFSET_Y;
-    if (right_platform != NULL)
-        right_platform->position.y += LEVEL2_PLATFORM_VISUAL_OFFSET_Y;
-    if (goal_portal != NULL)
-        goal_portal->position.y += LEVEL2_GOAL_VISUAL_OFFSET_Y;
-
     if (left_platform == NULL || right_platform == NULL || goal_portal == NULL)
     {
+    #ifndef DEBUG_ENABLE
+        DEBUG_LOG("[L2] init fail: base entities left=%p right=%p goal=%p\n", (void*)left_platform, (void*)right_platform, (void*)goal_portal);
+    #endif
         destroy_entity(left_platform);
         destroy_entity(right_platform);
         destroy_entity(goal_portal);
@@ -272,13 +339,15 @@ static bool level2_init(LevelInstance* level, LevelContext* ctx)
             level2_create_platform_visual(criar_cor(220, 200, 50), nv2(bridges[i]->size.x, bridges[i]->size.y)),
             true
         );
-        bridges[i]->position.y += LEVEL2_PLATFORM_VISUAL_OFFSET_Y;
         bridges[i]->collidable = false;
         entity_set_visible(bridges[i], false);
 
         int bridge_index = -1;
         if (!level_state_add_entity(common, bridges[i], &bridge_index))
         {
+#ifndef DEBUG_ENABLE
+            DEBUG_LOG("[L2] init bridge[%d] add entity failed\n", i);
+#endif
             destroy_entity(bridges[i]);
             bridges[i] = NULL;
             continue;
@@ -286,6 +355,18 @@ static bool level2_init(LevelInstance* level, LevelContext* ctx)
 
         local->bridge_indices[i] = bridge_index;
         bridges[i]->user_data = local;
+#ifndef DEBUG_ENABLE
+        DEBUG_LOG("[L2] init bridge[%d] entity=%p index=%d pos=(%d,%d) size=(%d,%d) visible=%d collidable=%d\n",
+            i,
+            (void*)bridges[i],
+            bridge_index,
+            bridges[i]->position.x,
+            bridges[i]->position.y,
+            bridges[i]->size.x,
+            bridges[i]->size.y,
+            bridges[i]->visible,
+            bridges[i]->collidable);
+#endif
     }
 
     int left_index = -1;
@@ -295,6 +376,9 @@ static bool level2_init(LevelInstance* level, LevelContext* ctx)
         || !level_state_add_entity(common, right_platform, &right_index)
         || !level_state_add_entity(common, goal_portal, &goal_index))
     {
+    #ifndef DEBUG_ENABLE
+        DEBUG_LOG("[L2] init fail: add base entities left=%d right=%d goal=%d\n", left_index, right_index, goal_index);
+    #endif
         destroy_entity(left_platform);
         destroy_entity(right_platform);
         destroy_entity(goal_portal);
@@ -310,24 +394,91 @@ static bool level2_init(LevelInstance* level, LevelContext* ctx)
     local->right_platform_index = right_index;
     local->goal_index = goal_index;
 
+#ifndef DEBUG_ENABLE
+    DEBUG_LOG("[L2] init base entities left=%p idx=%d right=%p idx=%d goal=%p idx=%d\n",
+        (void*)left_platform, left_index,
+        (void*)right_platform, right_index,
+        (void*)goal_portal, goal_index);
+#endif
+
+#ifndef DEBUG_ENABLE
+    {
+        Vector2 cell_left = collision_matrix_cell_world(&common->collision_map, LEVEL2_LEFT_PLATFORM_START, LEVEL2_PLATFORM_Y);
+        Vector2 cell_right = collision_matrix_cell_world(&common->collision_map, LEVEL2_LEFT_PLATFORM_END, LEVEL2_PLATFORM_Y);
+        DEBUG_LOG("[L2] left platform cell start=(%d,%d) world_start=(%d,%d) cell_end=(%d,%d) world_end=(%d,%d)\n",
+            LEVEL2_LEFT_PLATFORM_START, LEVEL2_PLATFORM_Y,
+            cell_left.x, cell_left.y,
+            LEVEL2_LEFT_PLATFORM_END, LEVEL2_PLATFORM_Y,
+            cell_right.x, cell_right.y);
+        if (left_platform->representation) {
+            DEBUG_LOG("[L2] left rep pos=(%d,%d) ent pos=(%d,%d) rep_size=(%d,%d) pivot=(%d,%d)\n",
+                left_platform->representation->position.x, left_platform->representation->position.y,
+                left_platform->position.x, left_platform->position.y,
+                left_platform->representation->size.x, left_platform->representation->size.y,
+                left_platform->representation->pivot_frames[0].x, left_platform->representation->pivot_frames[0].y);
+        }
+    }
+#endif
+
     bridges[0]->user_data = local;
     codebinding_registry_add(&common->binding_registry, bridges[0], 0, 4, level2_bridge_on_token);
+#ifndef DEBUG_ENABLE
+    DEBUG_LOG("[L2] init binding set bridge0=%p token=(0,4)\n", (void*)bridges[0]);
+#endif
 
-    local->level_label = criar_objeto_de_texto(1, 1, "Level 2 - Invisible Bridge");
+    local->level_label = criar_objeto_de_texto(1, 1, "Level 2");
     if (local->level_label != NULL)
     {
         centralizar_objeto(local->level_label);
         local->level_label->position = new_Vector2(-49, -13);
     }
+#ifndef DEBUG_ENABLE
+    DEBUG_LOG("[L2] init label=%p pos=(%d,%d)\n",
+        (void*)local->level_label,
+        local->level_label != NULL ? local->level_label->position.x : 0,
+        local->level_label != NULL ? local->level_label->position.y : 0);
+#endif
 
-    if (common->player == NULL)
+    if (common->player != NULL)
     {
-        common->player = create_player(new_Vector2(-38, -4));
-        common->player_spawn = common->player->position;
+    #ifndef DEBUG_ENABLE
+        DEBUG_LOG("[L2] init destroying residual player=%p\n", (void*)common->player);
+    #endif
+        destroy_player(common->player);
+        common->player = NULL;
     }
 
+    common->player = create_player(new_Vector2(-38, -4));
+    if (common->player == NULL)
+    {
+    #ifndef DEBUG_ENABLE
+        DEBUG_LOG("[L2] init fail: create_player returned NULL\n");
+    #endif
+        level_state_destroy(common);
+        free(local);
+        level->state = NULL;
+        return false;
+    }
+
+    common->player->user_data = common;
+    common->player->on_triggering = level2_player_on_triggering;
+    common->player_spawn = common->player->position;
+
+#ifndef DEBUG_ENABLE
+    DEBUG_LOG("[L2] init player=%p sprite=%p pos=(%d,%d) spawn=(%d,%d)\n",
+        (void*)common->player,
+        (void*)common->player->sprite,
+        common->player->position.x,
+        common->player->position.y,
+        common->player_spawn.x,
+        common->player_spawn.y);
+#endif
+
     level2_set_bridge_state(common, local, false);
-    level2_sync_bridge_visibility(common, local, ctx->game->curViewMode);
+    level2_sync_bridge_visibility(common, local, ctx->game);
+#ifndef DEBUG_ENABLE
+    DEBUG_LOG("[L2] init bridge state initialized enabled=%d\n", local->bridges_enabled);
+#endif
 
     common->cursor = (CodeCursor){
         .position = VETOR_NULO,
@@ -343,6 +494,9 @@ static bool level2_init(LevelInstance* level, LevelContext* ctx)
     };
 
     common->last_view_mode = ctx->game->curViewMode;
+#ifndef DEBUG_ENABLE
+    DEBUG_LOG("[L2] init complete\n");
+#endif
     return true;
 }
 
@@ -461,13 +615,23 @@ static void level2_tick(LevelInstance* level, LevelContext* ctx)
     LevelState* common = &level->common;
     Level2State* local = (Level2State*)level->state;
 
+    if (ctx->frame < 3)
+    {
+#ifndef DEBUG_ENABLE
+        DEBUG_LOG("[L2] tick frame=%llu mode=%d player=%p entities=%d\n",
+            (unsigned long long)ctx->frame,
+            (int)ctx->game->curViewMode,
+            (void*)common->player,
+            common->entity_count);
+#endif
+    }
+
     if (common->player != NULL)
         player_update(common->player, ctx->game, ctx->last_input);
 
     if (common->player != NULL)
     {
         Player* player = common->player;
-
         if (!player->alive)
             return;
 
@@ -490,7 +654,7 @@ static void level2_tick(LevelInstance* level, LevelContext* ctx)
             player->velocity,
             player,
             ctx->game,
-            NULL
+            level2_player_trigger_proxy
         );
 
         player->position = result.position;
@@ -539,8 +703,8 @@ static void level2_tick(LevelInstance* level, LevelContext* ctx)
         return;
     }
 
-    if (local != NULL && local->bridges_enabled)
-        level2_sync_bridge_visibility(common, local, ctx->game->curViewMode);
+        if (local != NULL && local->bridges_enabled)
+            level2_sync_bridge_visibility(common, local, ctx->game);
 }
 
 static void level2_draw(LevelInstance* level, LevelContext* ctx)
@@ -549,6 +713,18 @@ static void level2_draw(LevelInstance* level, LevelContext* ctx)
         return;
     LevelState* common = &level->common;
     Level2State* local = (Level2State*)level->state;
+
+    if (ctx->frame < 3)
+    {
+#ifndef DEBUG_ENABLE
+        DEBUG_LOG("[L2] draw frame=%llu mode=%d player=%p label=%p entities=%d\n",
+            (unsigned long long)ctx->frame,
+            (int)ctx->game->curViewMode,
+            (void*)common->player,
+            (void*)(local != NULL ? local->level_label : NULL),
+            common->entity_count);
+#endif
+    }
 
     if (ctx->game->curViewMode == TERMINAL)
     {
@@ -569,11 +745,24 @@ static void level2_draw(LevelInstance* level, LevelContext* ctx)
 
     if (ctx->game->curViewMode == DEBUG_COLLISION)
     {
-        level2_sync_bridge_visibility(common, local, ctx->game->curViewMode);
+        limpar_buffer(ctx->game->curScreen(ctx->game));
+        level2_sync_bridge_visibility(common, local, ctx->game);
+    #ifndef DEBUG_ENABLE
+        DEBUG_LOG("[L2] draw stage=debug-collision before-player\n");
+    #endif
         if (common->player != NULL)
             player_draw_view(common->player, ctx->game);
+    #ifndef DEBUG_ENABLE
+        DEBUG_LOG("[L2] draw stage=debug-collision before-entities\n");
+    #endif
         level_state_draw_entities(common, ctx->game);
+    #ifndef DEBUG_ENABLE
+        DEBUG_LOG("[L2] draw stage=debug-collision before-render\n");
+    #endif
         ctx->game->render(ctx->game);
+    #ifndef DEBUG_ENABLE
+        DEBUG_LOG("[L2] draw stage=debug-collision before-matrix\n");
+    #endif
         physics_draw_collision_matrix(
             &common->collision_map,
             ctx->game->curScreen(ctx->game),
@@ -584,33 +773,51 @@ static void level2_draw(LevelInstance* level, LevelContext* ctx)
     }
     else
     {
-        level2_sync_bridge_visibility(common, local, ctx->game->curViewMode);
+        level2_sync_bridge_visibility(common, local, ctx->game);
         limpar_buffer(ctx->game->curScreen(ctx->game));
         if (local != NULL && local->level_label != NULL)
             desenhar_objeto(ctx->game->curScreen(ctx->game), local->level_label);
 
+    #ifndef DEBUG_ENABLE
+        DEBUG_LOG("[L2] draw stage=visual before-player\n");
+    #endif
         if (common->player != NULL)
             player_draw_view(common->player, ctx->game);
+    #ifndef DEBUG_ENABLE
+        DEBUG_LOG("[L2] draw stage=visual before-entities\n");
+    #endif
         level_state_draw_entities(common, ctx->game);
+    #ifndef DEBUG_ENABLE
+        DEBUG_LOG("[L2] draw stage=visual before-render\n");
+    #endif
         ctx->game->render(ctx->game);
 
+    #ifndef DEBUG_ENABLE
+        DEBUG_LOG("[L2] draw stage=visual before-hide\n");
+    #endif
         player_hide_view(common->player, ctx->game);
         level_state_hide_entities(common, ctx->game);
     }
+
+    esperar(120);
 }
 
 static void level2_destroy(LevelInstance* level, LevelContext* ctx)
 {
-    (void)ctx;
     if (level == NULL)
         return;
 
     Level2State* local = (Level2State*)level->state;
     if (local != NULL && local->level_label != NULL)
     {
+        if (ctx != NULL && ctx->game != NULL)
+            esconder_objeto(ctx->game->curScreen(ctx->game), local->level_label);
         excluir_objeto(local->level_label);
         local->level_label = NULL;
     }
+
+    if (ctx != NULL && ctx->game != NULL)
+        level_state_hide_renderables(&level->common, ctx->game);
 
     level_state_destroy(&level->common);
     free(level->state);

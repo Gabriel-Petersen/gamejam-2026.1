@@ -1,3 +1,11 @@
+ #define DEBUG_ENABLE
+
+#ifdef DEBUG_ENABLE
+#define DEBUG_LOG(...) do { } while (0)
+#else
+#define DEBUG_LOG(...) printf(__VA_ARGS__)
+#endif
+
 #include "menu.h"
 #include "level.h"
 #include "levels/level_1.h"
@@ -52,12 +60,12 @@ int main()
         }
 
         LevelExitReason exit_reason = level.exit_reason;
+        game_clear_all_screens(ctx);
         int next_level_index = level.next_level_index;
         level_stop(&level, &level_ctx);
 
         if (exit_reason == LEVEL_EXIT_COMPLETED)
         {
-            game_clear_all_screens(ctx);
             if (next_level_index < 0)
                 next_level_index = current_level_index + 1;
             current_level_index = next_level_index;
