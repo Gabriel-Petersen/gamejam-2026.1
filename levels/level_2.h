@@ -21,14 +21,16 @@ enum {
     LEVEL2_PLATFORM_Y = 24,
     LEVEL2_LEFT_PLATFORM_START = 8,
     LEVEL2_LEFT_PLATFORM_END = 37,
-    LEVEL2_BRIDGE_BASE_START = 41,
-    LEVEL2_BRIDGE_SEGMENT_SPACING = 10,
-    LEVEL2_BRIDGE_SEGMENT_WIDTH = 5,
-    LEVEL2_RIGHT_PLATFORM_START = 67,
-    LEVEL2_RIGHT_PLATFORM_END = 113,
-    LEVEL2_GOAL_X = 111,
-    LEVEL2_GOAL_Y = 23
-    ,LEVEL2_RESET_ROW = 31
+    
+    LEVEL2_BRIDGE_BASE_START = 47,
+    LEVEL2_BRIDGE_SEGMENT_SPACING = 13,
+    LEVEL2_BRIDGE_SEGMENT_WIDTH = 3,
+    
+    LEVEL2_RIGHT_PLATFORM_START = 86,
+    LEVEL2_RIGHT_PLATFORM_END = 114,  
+    LEVEL2_GOAL_X = 108,              
+    LEVEL2_GOAL_Y = 23,
+    LEVEL2_RESET_ROW = 31
 };
 
 static CodeFile* create_level2_codefile(void)
@@ -121,6 +123,8 @@ static void level2_reset_player(Player* player)
     LevelState* common = (LevelState*)player->user_data;
     if (common == NULL) return;
     level_state_reset_player(common);
+    player->velocity = VETOR_NULO; 
+    player->grounded = true;
     player_apply_state(player, PLAYER_STATE_IDLE);
 }
 
@@ -743,26 +747,35 @@ static void level2_draw(LevelInstance* level, LevelContext* ctx)
         return;
     }
 
+    if (ctx->game->curViewMode == VISUAL && local != NULL)
+    {
+        if (local->level_label != NULL)
+            desenhar_objeto(ctx->game->curScreen(ctx->game), local->level_label);
+    }
+
     if (ctx->game->curViewMode == DEBUG_COLLISION)
     {
-        limpar_buffer(ctx->game->curScreen(ctx->game));
         level2_sync_bridge_visibility(common, local, ctx->game);
-    #ifndef DEBUG_ENABLE
+
+#ifndef DEBUG_ENABLE
         DEBUG_LOG("[L2] draw stage=debug-collision before-player\n");
-    #endif
+#endif
         if (common->player != NULL)
             player_draw_view(common->player, ctx->game);
-    #ifndef DEBUG_ENABLE
+
+#ifndef DEBUG_ENABLE
         DEBUG_LOG("[L2] draw stage=debug-collision before-entities\n");
-    #endif
+#endif
         level_state_draw_entities(common, ctx->game);
-    #ifndef DEBUG_ENABLE
+
+#ifndef DEBUG_ENABLE
         DEBUG_LOG("[L2] draw stage=debug-collision before-render\n");
-    #endif
+#endif
         ctx->game->render(ctx->game);
-    #ifndef DEBUG_ENABLE
+
+#ifndef DEBUG_ENABLE
         DEBUG_LOG("[L2] draw stage=debug-collision before-matrix\n");
-    #endif
+#endif
         physics_draw_collision_matrix(
             &common->collision_map,
             ctx->game->curScreen(ctx->game),
@@ -774,36 +787,38 @@ static void level2_draw(LevelInstance* level, LevelContext* ctx)
     else
     {
         level2_sync_bridge_visibility(common, local, ctx->game);
-        limpar_buffer(ctx->game->curScreen(ctx->game));
-        if (local != NULL && local->level_label != NULL)
-            desenhar_objeto(ctx->game->curScreen(ctx->game), local->level_label);
 
-    #ifndef DEBUG_ENABLE
+#ifndef DEBUG_ENABLE
         DEBUG_LOG("[L2] draw stage=visual before-player\n");
-    #endif
+#endif
         if (common->player != NULL)
             player_draw_view(common->player, ctx->game);
-    #ifndef DEBUG_ENABLE
-        DEBUG_LOG("[L2] draw stage=visual before-entities\n");
-    #endif
-        level_state_draw_entities(common, ctx->game);
-    #ifndef DEBUG_ENABLE
-        DEBUG_LOG("[L2] draw stage=visual before-render\n");
-    #endif
-        ctx->game->render(ctx->game);
 
-    #ifndef DEBUG_ENABLE
-        DEBUG_LOG("[L2] draw stage=visual before-hide\n");
-    #endif
-        player_hide_view(common->player, ctx->game);
-        level_state_hide_entities(common, ctx->game);
+#ifndef DEBUG_ENABLE
+        DEBUG_LOG("[L2] draw stage=visual before-entities\n");
+#endif
+        level_state_draw_entities(common, ctx->game);
+
+#ifndef DEBUG_ENABLE
+        DEBUG_LOG("[L2] draw stage=visual before-render\n");
+#endif
+        ctx->game->render(ctx->game);
     }
 
     esperar(120);
+
+#ifndef DEBUG_ENABLE
+    DEBUG_LOG("[L2] draw stage=cleanup hiding views\n");
+#endif
+    if (common->player != NULL)
+        player_hide_view(common->player, ctx->game);
+        
+    level_state_hide_entities(common, ctx->game);
 }
 
 static void level2_destroy(LevelInstance* level, LevelContext* ctx)
 {
+    return;
     if (level == NULL)
         return;
 

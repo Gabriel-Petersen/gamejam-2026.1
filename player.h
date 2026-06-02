@@ -146,11 +146,7 @@ static void player_update(Player* player, GameContext* ctx, char input)
         return;
     }
 
-    if (input == 'H')
-    {
-        player_apply_state(player, PLAYER_STATE_HIT);
-    }
-    else if ((input == 'W' || input == ' ') && player->grounded)
+    if ((input == 'W' || input == ' ') && player->grounded)
     {
         player->grounded = false;
         player->velocity.y = -4;

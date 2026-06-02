@@ -10,6 +10,8 @@
 #include "level.h"
 #include "levels/level_1.h"
 #include "levels/level_2.h"
+#include "levels/level_3.h"
+#include "levels/level_4.h"
 
 int main()
 {
@@ -22,7 +24,9 @@ int main()
 
     const LevelDefinition* campaign_levels[] = {
         level1_get_definition(),
-        level2_get_definition()
+        level2_get_definition(),
+        level3_get_definition(),
+        level4_get_definition()
     };
     const int total_levels = (int)(sizeof(campaign_levels) / sizeof(campaign_levels[0]));
     int current_level_index = 0;
@@ -79,5 +83,6 @@ int main()
     }
 
     freeGameCtx(ctx);
+    printf("\n\nO JOGO ACABOU :/\n\n");
     return 0;
 }

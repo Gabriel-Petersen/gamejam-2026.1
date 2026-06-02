@@ -45,8 +45,7 @@ static void menu_draw_button(Screen* screen, const char* text, Vector2 pos, bool
 
 static void menu_draw_overlay(MenuState* state)
 {
-    if (state == NULL || state->screen == NULL)
-        return;
+    if (state == NULL || state->screen == NULL) return;
 
     if (state->page == MENU_PAGE_MAIN)
     {
@@ -57,33 +56,30 @@ static void menu_draw_overlay(MenuState* state)
     }
     else if (state->page == MENU_PAGE_CREDITS)
     {
-        print_rgb_txt(state->screen, criar_cor(255, 235, 110), new_Vector2(8, 14), "creditos");
-        print_rgb_txt(state->screen, criar_cor(220, 220, 220), new_Vector2(8, 16), "Engine, arte e ideao inicial: prototipo da jam");
-        print_rgb_txt(state->screen, criar_cor(220, 220, 220), new_Vector2(8, 18), "UI, bindings e menu: camada de debug do jogo");
-        print_rgb_txt(state->screen, criar_cor(180, 180, 180), new_Vector2(8, 22), "Enter/Backspace/Esc volta");
+        print_rgb_txt(state->screen, criar_cor(255, 235, 110), new_Vector2(8, 10), "CREDITOS");
+        print_rgb_txt(state->screen, criar_cor(255, 255, 255), new_Vector2(8, 13), "Desenvolvimento integral por:");
+        print_rgb_txt(state->screen, criar_cor(90, 220, 110), new_Vector2(8, 15), "GABRIEL PETERSEN");
+        print_rgb_txt(state->screen, criar_cor(180, 180, 180), new_Vector2(8, 26), "Backspace volta");
     }
     else if (state->page == MENU_PAGE_TUTORIAL)
     {
-        print_rgb_txt(state->screen, criar_cor(255, 235, 110), new_Vector2(8, 14), "tutorial");
-        print_rgb_txt(state->screen, criar_cor(220, 220, 220), new_Vector2(8, 16), "W/S troca selecao | Enter abre");
-        print_rgb_txt(state->screen, criar_cor(220, 220, 220), new_Vector2(8, 18), "Visual: A/D anda, W ou Espaco pula");
-        print_rgb_txt(state->screen, criar_cor(220, 220, 220), new_Vector2(8, 20), "Terminal: Y/N troca token | Backspace apaga");
-        print_rgb_txt(state->screen, criar_cor(220, 220, 220), new_Vector2(8, 22), "R compila/aplica quando nao houver TOKEN_NULL");
-        print_rgb_txt(state->screen, criar_cor(180, 180, 180), new_Vector2(8, 26), "1-5 troca views | Enter/Backspace/Esc volta");
+        print_rgb_txt(state->screen, criar_cor(255, 235, 110), new_Vector2(8, 5), "TUTORIAL: O MUNDO DO CODIGO");
+        print_rgb_txt(state->screen, criar_cor(220, 220, 220), new_Vector2(8, 8),  "1. VISUAL: Use A/D para mover e W/Espaco para pular.");
+        print_rgb_txt(state->screen, criar_cor(220, 220, 220), new_Vector2(8, 10), "2. MUDAR MODO: Use as teclas 1-5 para trocar de visao.");
+        print_rgb_txt(state->screen, criar_cor(220, 220, 220), new_Vector2(8, 12), "3. TERMINAL: Ao acessar a visao TERMINAL:");
+        print_rgb_txt(state->screen, criar_cor(200, 200, 200), new_Vector2(10, 14), "- W/S/A/D navega no editor de codigo.");
+        print_rgb_txt(state->screen, criar_cor(200, 200, 200), new_Vector2(10, 16), "- Y/N ou teclas numericas alteram valores.");
+        print_rgb_txt(state->screen, criar_cor(200, 200, 200), new_Vector2(10, 18), "- Backspace apaga tokens alteraveis.");
+        print_rgb_txt(state->screen, criar_cor(200, 200, 200), new_Vector2(10, 20), "- R compila as alteracoes no mundo real.");
+        print_rgb_txt(state->screen, criar_cor(255, 200, 100), new_Vector2(8, 23), "ATENCAO: Se houver TOKEN_NULL, o codigo nao compila!");
+        print_rgb_txt(state->screen, criar_cor(180, 180, 180), new_Vector2(8, 26), "Backspace volta");
     }
 }
 
 static void menu_apply_selector(MenuState* state)
 {
-    if (state == NULL || state->screen == NULL || state->selector == NULL)
-        return;
-
-    static const Vector2 positions[3] = {
-        {8, 12},
-        {8, 16},
-        {8, 20}
-    };
-
+    if (state == NULL || state->screen == NULL || state->selector == NULL) return;
+    static const Vector2 positions[3] = { {8, 12}, {8, 16}, {8, 20} };
     esconder_objeto(state->screen, state->selector);
     state->selector->position = menu_screen_to_world(positions[state->selected_index]);
     desenhar_objeto(state->screen, state->selector);
@@ -91,11 +87,9 @@ static void menu_apply_selector(MenuState* state)
 
 static void menu_clear_terminal_area(void)
 {
-    for (int row = 0; row < SCREEN_SIZE_Y; row++)
-    {
+    for (int row = 0; row < SCREEN_SIZE_Y; row++) {
         moveCursor(new_Vector2(0, row));
-        for (int col = 0; col < SCREEN_SIZE_X; col++)
-            printf(" ");
+        for (int col = 0; col < SCREEN_SIZE_X; col++) printf(" ");
     }
 }
 
@@ -127,7 +121,6 @@ static MenuResult menu_run(void)
     while (true)
     {
         char input = ler_teclado();
-
         if (input == 'Q')
         {
             excluir_tela(state.screen);
@@ -140,18 +133,8 @@ static MenuResult menu_run(void)
 
         if (state.page == MENU_PAGE_MAIN)
         {
-            if (input == 'W')
-            {
-                state.selected_index = (state.selected_index + 2) % 3;
-                menu_apply_selector(&state);
-                state.dirty = true;
-            }
-            else if (input == 'S')
-            {
-                state.selected_index = (state.selected_index + 1) % 3;
-                menu_apply_selector(&state);
-                state.dirty = true;
-            }
+            if (input == 'W') { state.selected_index = (state.selected_index + 2) % 3; menu_apply_selector(&state); state.dirty = true; }
+            else if (input == 'S') { state.selected_index = (state.selected_index + 1) % 3; menu_apply_selector(&state); state.dirty = true; }
             else if (input == '\r' || input == '\n' || input == 13)
             {
                 if (state.selected_index == 1)
@@ -163,10 +146,9 @@ static MenuResult menu_run(void)
                     excluir_objeto(state.showcase_player);
                     return MENU_RESULT_PLAY;
                 }
-
                 state.page = (state.selected_index == 0) ? MENU_PAGE_CREDITS : MENU_PAGE_TUTORIAL;
                 esconder_objeto(state.screen, state.selector);
-                state.detail_frame->position = menu_screen_to_world(new_Vector2(6, 11));
+                state.detail_frame->position = menu_screen_to_world(new_Vector2(6, 4));
                 desenhar_objeto(state.screen, state.detail_frame);
                 state.dirty = true;
                 state.clear_required = true;
@@ -178,6 +160,8 @@ static MenuResult menu_run(void)
             {
                 state.page = MENU_PAGE_MAIN;
                 esconder_objeto(state.screen, state.detail_frame);
+                state.detail_frame->position = menu_screen_to_world(new_Vector2(82, 3));
+                desenhar_objeto(state.screen, state.detail_frame);
                 menu_apply_selector(&state);
                 state.dirty = true;
                 state.clear_required = true;
@@ -186,19 +170,13 @@ static MenuResult menu_run(void)
 
         if (state.dirty)
         {
-            if (state.clear_required)
-            {
-                limpar_buffer(state.screen);
-                menu_clear_terminal_area();
-            }
+            if (state.clear_required) { limpar_buffer(state.screen); menu_clear_terminal_area(); }
             render(state.screen, true);
             menu_draw_overlay(&state);
             state.dirty = false;
             state.clear_required = false;
         }
-
         esperar(40);
     }
 }
-
 #endif
